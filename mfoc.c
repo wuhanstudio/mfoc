@@ -35,6 +35,7 @@
 #define _XOPEN_SOURCE 1 // To enable getopt
 
 #include <rtthread.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -233,27 +234,27 @@ int mfoc(int argc, char *const argv[])
   mf_init(&r);
 
   if (nfc_initiator_init(r.pdi) < 0) {
-    // nfc_perrfor(r.pdi, "nfc_initiator_init");
-    goto errfor;
+    // nfc_perror(r.pdi, "nfc_initiator_init");
+    goto error;
   }
   // Drop the field for a while, so can be reset
   if (nfc_device_set_property_bool(r.pdi, NP_ACTIVATE_FIELD, true) < 0) {
-    // nfc_perrfor(r.pdi, "nfc_device_set_property_bool activate field");
-    goto errfor;
+    // nfc_perror(r.pdi, "nfc_device_set_property_bool activate field");
+    goto error;
   }
   // Let the reader only try once to find a tag
   if (nfc_device_set_property_bool(r.pdi, NP_INFINITE_SELECT, false) < 0) {
-    // nfc_perrfor(r.pdi, "nfc_device_set_property_bool infinite select");
-    goto errfor;
+    // nfc_perror(r.pdi, "nfc_device_set_property_bool infinite select");
+    goto error;
   }
   // Configure the CRC and Parity settings
   if (nfc_device_set_property_bool(r.pdi, NP_HANDLE_CRC, true) < 0) {
-    // nfc_perrfor(r.pdi, "nfc_device_set_property_bool crc");
-    goto errfor;
+    // nfc_perror(r.pdi, "nfc_device_set_property_bool crc");
+    goto error;
   }
   if (nfc_device_set_property_bool(r.pdi, NP_HANDLE_PARITY, true) < 0) {
-    // nfc_perrfor(r.pdi, "nfc_device_set_property_bool parity");
-    goto errfor;
+    // nfc_perror(r.pdi, "nfc_device_set_property_bool parity");
+    goto error;
   }
 
   /*
@@ -263,17 +264,17 @@ int mfoc(int argc, char *const argv[])
 
   int tag_count;
   if ((tag_count = nfc_initiator_select_passive_target(r.pdi, nm, NULL, 0, &t.nt)) < 0) {
-    // nfc_perrfor(r.pdi, "nfc_initiator_select_passive_target");
-    goto errfor;
+    // nfc_perror(r.pdi, "nfc_initiator_select_passive_target");
+    goto error;
   } else if (tag_count == 0) {
     rt_kprintf("No tag found.\n");
-    goto errfor;
+    goto error;
   }
 
   // Test if a compatible MIFARE tag is used
   if (((t.nt.nti.nai.btSak & 0x08) == 0) && (t.nt.nti.nai.btSak != 0x01)) {
     rt_kprintf("only Mifare Classic is supported\n");
-    goto errfor;
+    goto error;
   }
 
   t.authuid = (uint32_t) bytes_to_num(t.nt.nti.nai.abtUid + t.nt.nti.nai.szUidLen - 4, 4);
@@ -307,21 +308,21 @@ int mfoc(int argc, char *const argv[])
       break;
     default:
       rt_kprintf("Cannot determine card type from SAK\n");
-      goto errfor;
+      goto error;
   }
 
   t.sectors = (void *) calloc(t.num_sectors, sizeof(sector));
   if (t.sectors == NULL) {
     rt_kprintf("Cannot allocate memory for t.sectors\b");
-    goto errfor;
+    goto error;
   }
   if ((pk = (void *) malloc(sizeof(pKeys))) == NULL) {
     rt_kprintf("Cannot allocate memory for pk\b");
-    goto errfor;
+    goto error;
   }
   if ((bk = (void *) malloc(sizeof(bKeys))) == NULL) {
     rt_kprintf("Cannot allocate memory for bk\n");
-    goto errfor;
+    goto error;
   } else {
     bk->brokenKeys = NULL;
     bk->size = 0;
@@ -330,7 +331,7 @@ int mfoc(int argc, char *const argv[])
   d.distances = (void *) calloc(d.num_distances, sizeof(uint32_t));
   if (d.distances == NULL) {
     rt_kprintf("Cannot allocate memory for t.distances\n");
-    goto errfor;
+    goto error;
   }
 
   // Initialize t.sectors, keys are not known yet
@@ -367,8 +368,8 @@ int mfoc(int argc, char *const argv[])
           int res;
           if ((res = nfc_initiator_mifare_cmd(r.pdi, mc, block, &mp)) < 0) {
             if (res != NFC_EMFCAUTHFAIL) {
-              // nfc_perrfor(r.pdi, "nfc_initiator_mifare_cmd");
-              goto errfor;
+              // nfc_perror(r.pdi, "nfc_initiator_mifare_cmd");
+              goto error;
             }
             mf_anticollision(t, r);
           } else {
@@ -399,8 +400,8 @@ int mfoc(int argc, char *const argv[])
                 }
               } else {
                   if (res != NFC_ERFTRANS) {
-                    // nfc_perrfor(r.pdi, "nfc_initiator_mifare_cmd");
-                    goto errfor;
+                    // nfc_perror(r.pdi, "nfc_initiator_mifare_cmd");
+                    goto error;
                   }
                 mf_anticollision(t, r);
               }
@@ -413,8 +414,8 @@ int mfoc(int argc, char *const argv[])
           int res;
           if ((res = nfc_initiator_mifare_cmd(r.pdi, mc, block, &mp)) < 0) {
             if (res != NFC_EMFCAUTHFAIL) {
-              // nfc_perrfor(r.pdi, "nfc_initiator_mifare_cmd");
-              goto errfor;
+              // nfc_perror(r.pdi, "nfc_initiator_mifare_cmd");
+              goto error;
             }
             mf_anticollision(t, r);
             // No success, try next block
@@ -487,8 +488,8 @@ int mfoc(int argc, char *const argv[])
           int res;
           if ((res = nfc_initiator_mifare_cmd(r.pdi, mc, t.sectors[j].trailer, &mp)) < 0) {
             if (res != NFC_EMFCAUTHFAIL) {
-              // nfc_perrfor(r.pdi, "nfc_initiator_mifare_cmd");
-              goto errfor;
+              // nfc_perror(r.pdi, "nfc_initiator_mifare_cmd");
+              goto error;
             }
             mf_anticollision(t, r);
           } else {
@@ -517,8 +518,8 @@ int mfoc(int argc, char *const argv[])
                   }
                 } else {
                     if (res != NFC_ERFTRANS) {
-                      // nfc_perrfor(r.pdi, "nfc_initiator_mifare_cmd");
-                      goto errfor;
+                      // nfc_perror(r.pdi, "nfc_initiator_mifare_cmd");
+                      goto error;
                     }
                   mf_anticollision(t, r);
                 }
@@ -582,8 +583,8 @@ int mfoc(int argc, char *const argv[])
               int res;
               if ((res = nfc_initiator_mifare_cmd(r.pdi, mc, t.sectors[j].trailer, &mp)) < 0) {
                 if (res != NFC_EMFCAUTHFAIL) {
-                  // nfc_perrfor(r.pdi, "nfc_initiator_mifare_cmd");
-                  goto errfor;
+                  // nfc_perror(r.pdi, "nfc_initiator_mifare_cmd");
+                  goto error;
                 }
                 mf_anticollision(t, r);
               } else {
@@ -621,8 +622,8 @@ int mfoc(int argc, char *const argv[])
                     }
                   } else {
                       if (res != NFC_ERFTRANS) {
-                        // nfc_perrfor(r.pdi, "nfc_initiator_mifare_cmd");
-                        goto errfor;
+                        // nfc_perror(r.pdi, "nfc_initiator_mifare_cmd");
+                        goto error;
                       }
                     mf_anticollision(t, r);
                   }
@@ -641,7 +642,7 @@ int mfoc(int argc, char *const argv[])
         // We haven't found any key, return ing
         if ((dumpKeysA && !t.sectors[j].foundKeyA) || (!dumpKeysA && !t.sectors[j].foundKeyB)) {
           rt_kprintf("No success, maybe you should increase the probes");
-          goto errfor;
+          goto error;
         }
       }
     }
@@ -670,8 +671,8 @@ int mfoc(int argc, char *const argv[])
       int res;
       if ((res = nfc_initiator_mifare_cmd(r.pdi, MC_AUTH_A, block, &mp)) < 0) {
         if (res != NFC_EMFCAUTHFAIL) {
-          // nfc_perrfor(r.pdi, "nfc_initiator_mifare_cmd");
-          goto errfor;
+          // nfc_perror(r.pdi, "nfc_initiator_mifare_cmd");
+          goto error;
         }
         mf_configure(r.pdi);
         mf_anticollision(t, r);
@@ -683,18 +684,18 @@ int mfoc(int argc, char *const argv[])
           mf_select_tag(r.pdi, &(t.nt));
           failure = false;
         } else {
-          // errfor, now try read() with B key
+          // error, now try read() with B key
           if (res != NFC_ERFTRANS) {
-            // nfc_perrfor(r.pdi, "nfc_initiator_mifare_cmd");
-            goto errfor;
+            // nfc_perror(r.pdi, "nfc_initiator_mifare_cmd");
+            goto error;
           }
           mf_configure(r.pdi);
           mf_anticollision(t, r);
           memcpy(mp.mpa.abtKey, t.sectors[i].KeyB, sizeof(t.sectors[i].KeyB));
           if ((res = nfc_initiator_mifare_cmd(r.pdi, MC_AUTH_B, block, &mp)) < 0) {
             if (res != NFC_EMFCAUTHFAIL) {
-              // nfc_perrfor(r.pdi, "nfc_initiator_mifare_cmd");
-              goto errfor;
+              // nfc_perror(r.pdi, "nfc_initiator_mifare_cmd");
+              goto error;
             }
             mf_configure(r.pdi);
             mf_anticollision(t, r);
@@ -707,12 +708,12 @@ int mfoc(int argc, char *const argv[])
               failure = false;
             } else {
               if (res != NFC_ERFTRANS) {
-                // nfc_perrfor(r.pdi, "nfc_initiator_mifare_cmd");
-                goto errfor;
+                // nfc_perror(r.pdi, "nfc_initiator_mifare_cmd");
+                goto error;
               }
               mf_configure(r.pdi);
               mf_anticollision(t, r);
-              // rt_kprintf ("errfor: Read B");
+              // rt_kprintf ("error: Read B");
             }
           }
         }
@@ -729,9 +730,9 @@ int mfoc(int argc, char *const argv[])
     // Finally save all keys + data to file
     uint16_t dump_size = (t.num_blocks + 1) * 16;
     if (fwrite(&mtDump, 1, dump_size, pfDump) != dump_size) {
-      rt_kprintf("errfor, cannot write dump\n");
+      rt_kprintf("error, cannot write dump\n");
       fclose(pfDump);
-      goto errfor;
+      goto error;
     }
     fclose(pfDump);
   }
@@ -747,7 +748,7 @@ int mfoc(int argc, char *const argv[])
   nfc_close(r.pdi);
   // nfc_return (context);
   return (EXIT_SUCCESS);
-errfor:
+error:
   nfc_close(r.pdi);
   // nfc_return (context);
   return 0;
@@ -796,31 +797,31 @@ void mf_init(mfreader *r)
 void mf_configure(nfc_device *pdi)
 {
   if (nfc_initiator_init(pdi) < 0) {
-    // nfc_perrfor(pdi, "nfc_initiator_init");
+    // nfc_perror(pdi, "nfc_initiator_init");
     return;
   }
   // Drop the field for a while, so can be reset
   if (nfc_device_set_property_bool(pdi, NP_ACTIVATE_FIELD, false) < 0) {
-    // nfc_perrfor(pdi, "nfc_device_set_property_bool activate field");
+    // nfc_perror(pdi, "nfc_device_set_property_bool activate field");
     return;
   }
   // Let the reader only try once to find a tag
   if (nfc_device_set_property_bool(pdi, NP_INFINITE_SELECT, false) < 0) {
-    // nfc_perrfor(pdi, "nfc_device_set_property_bool infinite select");
+    // nfc_perror(pdi, "nfc_device_set_property_bool infinite select");
     return;
   }
   // Configure the CRC and Parity settings
   if (nfc_device_set_property_bool(pdi, NP_HANDLE_CRC, true) < 0) {
-    // nfc_perrfor(pdi, "nfc_device_set_property_bool crc");
+    // nfc_perror(pdi, "nfc_device_set_property_bool crc");
     return;
   }
   if (nfc_device_set_property_bool(pdi, NP_HANDLE_PARITY, true) < 0) {
-    // nfc_perrfor(pdi, "nfc_device_set_property_bool parity");
+    // nfc_perror(pdi, "nfc_device_set_property_bool parity");
     return;
   }
   // Enable the field so more power consuming cards can power themselves up
   if (nfc_device_set_property_bool(pdi, NP_ACTIVATE_FIELD, true) < 0) {
-    // nfc_perrfor(pdi, "nfc_device_set_property_bool activate field");
+    // nfc_perror(pdi, "nfc_device_set_property_bool activate field");
     return;
   }
 }
@@ -870,7 +871,7 @@ int find_exploit_sector(mftag t)
 void mf_anticollision(mftag t, mfreader r)
 {
   if (nfc_initiator_select_passive_target(r.pdi, nm, NULL, 0, &t.nt) < 0) {
-    // nfc_perrfor(r.pdi, "nfc_initiator_select_passive_target");
+    // nfc_perror(r.pdi, "nfc_initiator_select_passive_target");
     rt_kprintf("Tag has been removed");
     return;
   }
@@ -886,24 +887,24 @@ get_rats_is_2k(mftag t, mfreader r)
   uint8_t  abtRats[2] = { 0xe0, 0x50};
   // Use raw send/receive methods
   if (nfc_device_set_property_bool(r.pdi, NP_EASY_FRAMING, false) < 0) {
-    // nfc_perrfor(r.pdi, "nfc_configure");
+    // nfc_perror(r.pdi, "nfc_configure");
     return false;
   }
   res = nfc_initiator_transceive_bytes(r.pdi, abtRats, sizeof(abtRats), abtRx, sizeof(abtRx), 0);
   if (res > 0) {
     // ISO14443-4 card, turn RF field off/on to access ISO14443-3 again
     if (nfc_device_set_property_bool(r.pdi, NP_ACTIVATE_FIELD, false) < 0) {
-      // nfc_perrfor(r.pdi, "nfc_configure");
+      // nfc_perror(r.pdi, "nfc_configure");
       return false;
     }
     if (nfc_device_set_property_bool(r.pdi, NP_ACTIVATE_FIELD, true) < 0) {
-      // nfc_perrfor(r.pdi, "nfc_configure");
+      // nfc_perror(r.pdi, "nfc_configure");
       return false;
     }
   }
   // Reselect tag
   if (nfc_initiator_select_passive_target(r.pdi, nm, NULL, 0, &t.nt) <= 0) {
-    printf("errfor: tag disappeared\n");
+    printf("error: tag disappeared\n");
     nfc_close(r.pdi);
     // nfc_return (context);
     return 0;
@@ -953,24 +954,24 @@ int mf_enhanced_auth(int e_sector, int a_sector, mftag t, mfreader r, denonce *d
 
   // We need full control over the CRC
   if (nfc_device_set_property_bool(r.pdi, NP_HANDLE_CRC, false) < 0)  {
-    // nfc_perrfor(r.pdi, "nfc_device_set_property_bool crc");
+    // nfc_perror(r.pdi, "nfc_device_set_property_bool crc");
     return 0;
   }
 
   // Request plain tag-nonce
   // TODO: Set NP_EASY_FRAMING option only once if possible
   if (nfc_device_set_property_bool(r.pdi, NP_EASY_FRAMING, false) < 0) {
-    // nfc_perrfor(r.pdi, "nfc_device_set_property_bool framing");
+    // nfc_perror(r.pdi, "nfc_device_set_property_bool framing");
     return 0;
   }
 
   if (nfc_initiator_transceive_bytes(r.pdi, Auth, 4, Rx, sizeof(Rx), 0) < 0) {
-    rt_kprintf("errfor while requesting plain tag-nonce\n");
+    rt_kprintf("error while requesting plain tag-nonce\n");
     return 0;
   }
 
   if (nfc_device_set_property_bool(r.pdi, NP_EASY_FRAMING, true) < 0) {
-    // nfc_perrfor(r.pdi, "nfc_device_set_property_bool");
+    // nfc_perror(r.pdi, "nfc_device_set_property_bool");
     return 0;
   }
   // print_hex(Rx, 4);
@@ -1007,7 +1008,7 @@ int mf_enhanced_auth(int e_sector, int a_sector, mftag t, mfreader r, denonce *d
 
   // Finally we want to send arbitrary parity bits
   if (nfc_device_set_property_bool(r.pdi, NP_HANDLE_PARITY, false) < 0) {
-    // nfc_perrfor(r.pdi, "nfc_device_set_property_bool parity");
+    // nfc_perror(r.pdi, "nfc_device_set_property_bool parity");
     return 0;
   }
 
@@ -1016,7 +1017,7 @@ int mf_enhanced_auth(int e_sector, int a_sector, mftag t, mfreader r, denonce *d
   // print_hex_par(ArEnc, 64, ArEncPar);
   int res;
   if (((res = nfc_initiator_transceive_bits(r.pdi, ArEnc, 64, ArEncPar, Rx, sizeof(Rx), RxPar)) < 0) || (res != 32)) {
-    rt_kprintf("Reader-answer transfer errfor, return ing..");
+    rt_kprintf("Reader-answer transfer error, return ing..");
     return 0;
   }
 
@@ -1045,7 +1046,7 @@ int mf_enhanced_auth(int e_sector, int a_sector, mftag t, mfreader r, denonce *d
 
       // Sending the encrypted Auth command
       if (nfc_initiator_transceive_bits(r.pdi, AuthEnc, 32, AuthEncPar, Rx, sizeof(Rx), RxPar) < 0) {
-        rt_kprintf("errfor requesting encrypted tag-nonce\n");
+        rt_kprintf("error requesting encrypted tag-nonce\n");
         return 0;
       }
 
@@ -1078,7 +1079,7 @@ int mf_enhanced_auth(int e_sector, int a_sector, mftag t, mfreader r, denonce *d
       }
       nfc_device_set_property_bool(r.pdi, NP_HANDLE_PARITY, false);
       if (((res = nfc_initiator_transceive_bits(r.pdi, ArEnc, 64, ArEncPar, Rx, sizeof(Rx), RxPar)) < 0) || (res != 32)) {
-        rt_kprintf("Reader-answer transfer errfor, return ing..");
+        rt_kprintf("Reader-answer transfer error, return ing..");
         return 0;
       }
       Nt = prng_successor(Nt, 32);
@@ -1113,12 +1114,12 @@ int mf_enhanced_auth(int e_sector, int a_sector, mftag t, mfreader r, denonce *d
 
     // Finally we want to send arbitrary parity bits
     if (nfc_device_set_property_bool(r.pdi, NP_HANDLE_PARITY, true) < 0)  {
-      // nfc_perrfor(r.pdi, "nfc_device_set_property_bool parity restore M");
+      // nfc_perror(r.pdi, "nfc_device_set_property_bool parity restore M");
       return 0;
     }
 
     if (nfc_device_set_property_bool(r.pdi, NP_HANDLE_CRC, true) < 0)  {
-      // nfc_perrfor(r.pdi, "nfc_device_set_property_bool crc restore M");
+      // nfc_perror(r.pdi, "nfc_device_set_property_bool crc restore M");
       return 0;
     }
 
@@ -1155,7 +1156,7 @@ int mf_enhanced_auth(int e_sector, int a_sector, mftag t, mfreader r, denonce *d
             // rt_kprintf("New chunk by %d, sizeof %lu\n", kcount, pk->size * sizeof(uint64_t));
             pk->possibleKeys = (uint64_t *) realloc((void *)pk->possibleKeys, pk->size * sizeof(uint64_t));
             if (pk->possibleKeys == NULL) {
-              rt_kprintf("Memory allocation errfor for pk->possibleKeys");
+              rt_kprintf("Memory allocation error for pk->possibleKeys");
               return 0;
             }
           }
@@ -1171,7 +1172,7 @@ int mf_enhanced_auth(int e_sector, int a_sector, mftag t, mfreader r, denonce *d
     if (kcount != 0) {
       pk->size = --kcount;
       if ((pk->possibleKeys = (uint64_t *) realloc((void *)pk->possibleKeys, pk->size * sizeof(uint64_t))) == NULL) {
-        rt_kprintf("Memory allocation errfor for pk->possibleKeys");
+        rt_kprintf("Memory allocation error for pk->possibleKeys");
         return 0;
       }
     }
@@ -1216,7 +1217,7 @@ countKeys *uniqsort(uint64_t *possibleKeys, uint32_t size)
 
   our_counts = calloc(size, sizeof(countKeys));
   if (our_counts == NULL) {
-    rt_kprintf("Memory allocation errfor for our_counts");
+    rt_kprintf("Memory allocation error for our_counts");
     return 0;
   }
 
